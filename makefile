@@ -1,4 +1,8 @@
-build: parent
+build: parent child
 
-parent: parent.cc
+parent: main.cc parent.cc
 	gcc -o parent $^
+
+child: child.cc
+	gcc -o child $^
+	
