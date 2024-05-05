@@ -6,11 +6,24 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/queue.h>
 
+//===== CHILD LIST =====
+struct Child
+{
+	unsigned	index;
+	pid_t		pid;
 
+	TAILQ_ENTRY(Child) allChildren;         /* Tail queue. */
+};
+
+TAILQ_HEAD(HeadOfCollection, Child) head;
+
+//===== functions =====
 pid_t	pidChild_test = 0;
 
 int createChild(unsigned indexChild, char* pathChildEnv, char* dirChild);
+void printStatistic(struct Child* pChild);
 void printUsage(char* nameProgram, short index);
 void stopStatistic();
 
@@ -42,6 +55,7 @@ int main(int argc, char* argv[], char* envp[])
 
 	char ch;
 	unsigned indexChild = 0;
+	TAILQ_INIT(&head);                      /* Initialize the queue. */
 
 	while (ch = getchar())
 	{
@@ -57,6 +71,21 @@ int main(int argc, char* argv[], char* envp[])
 				return 0;
 			}
 			// parent process
+			struct Child* pChild = (Child*)malloc(sizeof(struct Child));
+
+			pChild->index = indexChild - 1;
+			pChild->pid = pidChild;
+
+			//TAILQ_INSERT_TAIL(&head, pChild, allChildren);
+
+			///////////////////////////////////////////
+			do {
+					(pChild)->allChildren.tqe_next = NULL;
+					(pChild)->allChildren.tqe_prev = (head).tqh_last;
+					* (head).tqh_last = (pChild);
+					(head).tqh_last = &(pChild)->allChildren.tqe_next;
+			} while (0);
+			///////////////////////////////////////////
 
 			pidChild_test = pidChild;
 
@@ -71,12 +100,44 @@ int main(int argc, char* argv[], char* envp[])
 			break;
 		}
 
-			//case '-':
+		case '-':
 
-			//	break;
-			//case 'l':
+		break;
+		case 'l':
+		{
+			for (struct Child* pChild = head.tqh_first; pChild != NULL; )
+			{
+				printStatistic(pChild);
+				//pChild = pChild->allChildren.tqe_next;
+				(pChild) = (*(head).tqh_last);//////////////
+			}
+			///// begin
+			struct Child* pChild;
 
-			//	break;
+/*			(pChild) = (*(head).tqh_last);
+			printf("pChild = %p", pChild*/
+
+			printf("head.tqh_first = %p\n", head.tqh_first);
+			printf("head.tqh_last = %p\n", head.tqh_last);
+			printf("*head.tqh_last = %p\n", *head.tqh_last);
+
+//			printStatistic(head.tqh_first);
+//			printStatistic(*head.tqh_last);
+			pChild = (struct Child*)(*(head.tqh_last));
+			//*
+//			pChild = TAILQ_LAST(&head, Child);
+			if (pChild != NULL)
+			{
+				printStatistic(pChild);
+			}
+			else
+			{
+				printf("not found\n");
+			}
+			//*/
+			///// end
+			break;
+		}
 			//case 'k':
 
 			//	break;
@@ -124,4 +185,17 @@ void printUsage(char* nameProgram, short index)
 void stopStatistic()
 {
 	kill(pidChild_test, SIGUSR1);
+}
+
+void printStatistic(struct Child* pChild)
+{
+	printf("printStatistic ST\n");
+	char nameProgram[9] = { 0, };
+
+
+	sprintf(nameProgram, "child_%02d", pChild->index);
+	printf("nameProgram: %s\t", nameProgram);
+	printf("pid: %d\n", pChild->pid);
+		
+	printf("printStatistic OK\n");
 }

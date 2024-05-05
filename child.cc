@@ -6,10 +6,9 @@
 #include <string.h>
 #include <time.h>
 
-/*
-#include <unistd.h>
-#include <stdlib.h>
-//*/
+const char* nameProgram = NULL;
+
+
 void signalHandler(int signum)
 {
 	perror("signalHandler ST\n");
@@ -32,34 +31,23 @@ void withNanoSleep()
 		result = nanosleep(&time, &tim2);
 		if (result == 0)
 		{
-			printf("Time elapsed\n");
+			printf("%s\n", nameProgram);
+//			printf("Time elapsed\n");
 		}
 		if (result == -1)
 		{
-			printf("signal\n");
-			printf("errno: %d\n", errno);
-			printf("errno: %s\n", strerror(errno));
-			
+			if (errno != 4)
+			{
+				printf("Error in nanosleep():\n");
+				printf("  errno: %d\n", errno);
+				printf("  errno: %s\n", strerror(errno));
+
+				return;
+			}
 		}
 	}
 }
 
-void waitSignal()
-{
-	printf("waitSignal ST\n");
-	sigset_t sigToWait;
-
-	sigemptyset(&sigToWait);
-	if (sigaddset(&sigToWait, SIGUSR1) != 0)
-	{
-		printf("errno in sigaddset\n");
-		return;
-	}
-	int signal;
-
-	sigwait(&sigToWait, &signal);
-	printf("waitSignal OK\n");
-}
 
 int main(int argc, char* argv[])
 {
@@ -68,22 +56,8 @@ int main(int argc, char* argv[])
 	int					result;
 	struct sigaction	action;
 
-	/*
-	sigset_t oldmask_1, oldmask_2, newmask_1, newmask_2;
-
-
-	sigemptyset(&newmask_1);
-	sigaddset(&newmask_1, SIGUSR1);
-	sigprocmask(SIG_BLOCK, &newmask_1, &oldmask_1);
-
-	sigemptyset(&newmask_2);
-	sigaddset(&newmask_2, SIGUSR2);
-	sigprocmask(SIG_BLOCK, &newmask_2, &oldmask_2);
-	//*/
-
 	action.sa_handler = signalHandler;
 	action.sa_flags = 0;
-	action.sa_flags = SA_SIGINFO;
 
 	// connect to Signals
 	//*
@@ -95,6 +69,7 @@ int main(int argc, char* argv[])
 		printf("child process OK\n");
 		return 1;
 	}
+	/*
 	result = sigaction(SIGUSR2, &action, NULL);
 	if (result == -1)
 	{
@@ -104,8 +79,8 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 	//*/
+	nameProgram = argv[0];
 
-///	waitSignal();
 	withNanoSleep();
 
 
