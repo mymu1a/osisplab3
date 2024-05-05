@@ -39,21 +39,33 @@ int createChild(unsigned int indexChild, char* pathChildEnv, char* dirChild)
 
 void waitSignal()
 {
-	printf("waitSignal ST\n");
+	perror("waitSignal ST\n");
 	sigset_t sigToWait;
 
+	sigemptyset(&sigToWait);
 	if (sigaddset(&sigToWait, SIGUSR1) != 0)
+	{
+		printf("errno in sigaddset\n");
+		return;
+	}
+	if (sigaddset(&sigToWait, SIGKILL) != 0)
 	{
 		printf("errno in sigaddset\n");
 		return;
 	}
 	int signal;
 
-	sigwait(&sigToWait, &signal);
-	printf("waitSignal OK\n");
+	int err = sigwait(&sigToWait, &signal);
+	if (err != 0)
+	{
+		perror("sigwait error\n");
+///		exit(1);
+	}
+
+	perror("waitSignal OK\n");
 }
 
-int startChild(char* path, char* pathEnv, unsigned index)
+int startChild_2(char* path, char* pathEnv, unsigned index)
 {
 	printf("startChild ST\n");
 	waitSignal();		/////
@@ -62,7 +74,7 @@ int startChild(char* path, char* pathEnv, unsigned index)
 	return 1;
 }
 
-int startChild_2(char* path, char* pathEnv, unsigned index)
+int startChild(char* path, char* pathEnv, unsigned index)
 {
 	printf("startChild ST\n");
 
