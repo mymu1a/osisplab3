@@ -31,7 +31,7 @@ void withNanoSleep()
 		result = nanosleep(&time, &tim2);
 		if (result == 0)
 		{
-			printf("%s\n", nameProgram);
+			printf("\t%s\n", nameProgram);
 //			printf("Time elapsed\n");
 		}
 		if (result == -1)

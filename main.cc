@@ -7,8 +7,10 @@
 #include <unistd.h>
 
 #include <sys/queue.h>
+#include <sys/wait.h>
+#include <ctype.h>
 
-//===== CHILD LIST =====
+//===== `Child` Struct =====
 struct Child
 {
 	unsigned	index;
@@ -17,15 +19,21 @@ struct Child
 	TAILQ_ENTRY(Child) allChildren;         /* Tail queue. */
 };
 
-TAILQ_HEAD(HeadOfCollection, Child) head;
-
-//===== functions =====
-pid_t	pidChild_test = 0;
-
+//===== Functions =====
 int createChild(unsigned indexChild, char* pathChildEnv, char* dirChild);
+struct Child* getChild(int indexChild);
 void printStatistic(struct Child* pChild);
 void printUsage(char* nameProgram, short index);
+void stopChild(pid_t pidChild);						// send `SIGKILL` signal to Child
+void stopChildAll();								// terminate all Child processes
+void startStatistic();
+void startStatistic(pid_t pidChild);
 void stopStatistic();
+void stopStatistic(pid_t pidChild);
+
+//=== Global Variables ===
+TAILQ_HEAD(HeadOfCollection, Child) head = TAILQ_HEAD_INITIALIZER(head);
+unsigned countChild = 0;
 
 
 int main(int argc, char* argv[], char* envp[])
@@ -53,110 +61,143 @@ int main(int argc, char* argv[], char* envp[])
 
 	printf("Type: + - l k s g s<num> g<num> p<num>\n");
 
-	char ch;
+	//=== read user input ===
+	int ch;
 	unsigned indexChild = 0;
 	TAILQ_INIT(&head);                      /* Initialize the queue. */
 
-	while (ch = getchar())
+	while ((ch = getchar()) != EOF)
 	{
+		int charNext;
+		struct Child* pChild;
+
+		if (ch == 's' || ch == 'g' || ch == 'p')
+		{
+			charNext = getchar();
+			if (isdigit(charNext))
+			{
+				pChild = getChild(charNext);
+				printf("<< Error:  there is no Child with index: %c\n", charNext);
+
+				continue;
+			}
+			else
+			{ // return 'char' back to the stream
+				ungetc(charNext, stdin);
+			}
+		}
+		//=== select command ===
 		switch (ch)
 		{
-		case '+':
+		case '+':						// add a new Child process
 		{
 			pid_t	pidChild;
 
-			pidChild = createChild(indexChild++, argv[1], dirChild);
+			pidChild = createChild(indexChild, argv[1], dirChild);
+
+			//=== child process or error ===
 			if (pidChild == -1)
-			{ // child or error
+			{
 				return 0;
 			}
-			// parent process
+			//=== parent process ===
 			struct Child* pChild = (Child*)malloc(sizeof(struct Child));
 
-			pChild->index = indexChild - 1;
+			pChild->index = indexChild;
 			pChild->pid = pidChild;
 
-			//TAILQ_INSERT_TAIL(&head, pChild, allChildren);
+			TAILQ_INSERT_TAIL(&head, pChild, allChildren);
+			printf("Start Child: %d\n", indexChild);
+			indexChild++;
+			countChild++;
 
-			///////////////////////////////////////////
-			do {
-					(pChild)->allChildren.tqe_next = NULL;
-					(pChild)->allChildren.tqe_prev = (head).tqh_last;
-					* (head).tqh_last = (pChild);
-					(head).tqh_last = &(pChild)->allChildren.tqe_next;
-			} while (0);
-			///////////////////////////////////////////
+			break;
+		}
+		case '-':						// terminate latest created Child process
+		{
+			struct Child* pChild;
 
-			pidChild_test = pidChild;
+			pChild = TAILQ_LAST(&head, HeadOfCollection);
+			if (pChild == NULL)
+			{
+				printf("There is no more Child elements\n");
+				break;
+			}
+			printf("Terminate Child: %d\n", pChild->index);
+			stopChild(pChild->pid);				// send signal to Child
 
+			TAILQ_REMOVE(&head, pChild, allChildren);
+			free(pChild);
+
+			countChild--;
+			printf("countChildren = %d\n", countChild);
+			break;
+		}
+		case 'k':
+		{
+			stopChildAll();				// terminate all Child processes
+			TAILQ_INIT(&head);
+			break;
+		}
+		case 'g':
+		{
+			if (pChild != NULL)
+			{
+				startStatistic(pChild->pid);
+			}
+			else
+			{
+				startStatistic();
+			}
 			break;
 		}
 		case 's':
 		{
-			if (pidChild_test != 0)
+			if (pChild != NULL)
+			{
+				stopStatistic(pChild->pid);
+			}
+			else
 			{
 				stopStatistic();
 			}
 			break;
 		}
-
-		case '-':
-
-		break;
+		case 'p':
+		{
+			if (pChild != NULL)
+			{
+				stopStatistic();				// запрещает всем C_k вывод
+				startStatistic(pChild->pid);	// запрашивает C_<num> вывести свою статистику
+			}
+		}
 		case 'l':
 		{
+			printf("Current state:\n");
+
 			for (struct Child* pChild = head.tqh_first; pChild != NULL; )
 			{
 				printStatistic(pChild);
-				//pChild = pChild->allChildren.tqe_next;
-				(pChild) = (*(head).tqh_last);//////////////
+				pChild = pChild->allChildren.tqe_next;
 			}
-			///// begin
-			struct Child* pChild;
-
-/*			(pChild) = (*(head).tqh_last);
-			printf("pChild = %p", pChild*/
-
-			printf("head.tqh_first = %p\n", head.tqh_first);
-			printf("head.tqh_last = %p\n", head.tqh_last);
-			printf("*head.tqh_last = %p\n", *head.tqh_last);
-
-//			printStatistic(head.tqh_first);
-//			printStatistic(*head.tqh_last);
-			pChild = (struct Child*)(*(head.tqh_last));
-			//*
-//			pChild = TAILQ_LAST(&head, Child);
-			if (pChild != NULL)
-			{
-				printStatistic(pChild);
-			}
-			else
-			{
-				printf("not found\n");
-			}
-			//*/
-			///// end
 			break;
 		}
-			//case 'k':
-
-			//	break;
-			//case 'g':
-
-			//	break;
-			//case 's':
-
-			//	break;
-			//case 'g':
-
-			//	break;
-			//case 'p':
-
-			//	break;
-			// parent process
 		case 'q':
+			stopChildAll();				// terminate all Child processes
+
 			printf("main OK\n");
 			return 0;
+
+		case 'z':						// kill zombie processes
+		{
+			int stat;
+
+			while (waitpid(-1, &stat, WUNTRACED) > 0)
+			{
+			}
+			break;
+		}
+
 		}
 	}
 	printf("main OK\n");
@@ -182,20 +223,74 @@ void printUsage(char* nameProgram, short index)
 	printf("\n");
 }
 
+void startStatistic()
+{
+	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
+	{
+		startStatistic(pChild->pid);
+		pChild = pChild->allChildren.tqe_next;
+	}
+}
+
+void startStatistic(pid_t pidChild)
+{
+	kill(pidChild, SIGUSR2);
+}
+
 void stopStatistic()
 {
-	kill(pidChild_test, SIGUSR1);
+	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
+	{
+		stopStatistic(pChild->pid);
+		pChild = pChild->allChildren.tqe_next;
+	}
+}
+
+void stopStatistic(pid_t pidChild)
+{
+	kill(pidChild, SIGUSR1);
 }
 
 void printStatistic(struct Child* pChild)
 {
-	printf("printStatistic ST\n");
 	char nameProgram[9] = { 0, };
 
-
 	sprintf(nameProgram, "child_%02d", pChild->index);
-	printf("nameProgram: %s\t", nameProgram);
+	printf("\tnameProgram: %s\t", nameProgram);
 	printf("pid: %d\n", pChild->pid);
-		
-	printf("printStatistic OK\n");
+}
+
+struct Child* getChild(int indexChild)
+{
+	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
+	{
+		if (pChild->index == indexChild)
+		{
+			return pChild;
+		}
+		pChild = pChild->allChildren.tqe_next;
+	}
+	return NULL;
+}
+
+void stopChild(pid_t pidChild)
+{
+	kill(pidChild, SIGKILL);
+}
+
+void stopChildAll()
+{
+	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
+	{
+		struct Child* pChildNext;
+
+		pChildNext = pChild->allChildren.tqe_next;
+
+		printf("Terminate Child: %d\n", pChild->index);
+		stopChild(pChild->pid);				// send signal to Child
+		free(pChild);
+
+		pChild = pChildNext;
+	}
+	countChild = 0;
 }
