@@ -69,21 +69,24 @@ int main(int argc, char* argv[], char* envp[])
 	while ((ch = getchar()) != EOF)
 	{
 		int charNext;
-		struct Child* pChild;
+		struct Child* pChild = NULL;
 
 		if (ch == 's' || ch == 'g' || ch == 'p')
 		{
 			charNext = getchar();
+			fprintf(stderr, "charNext = %c\n", charNext);
 			if (isdigit(charNext))
 			{
-				pChild = getChild(charNext);
+				pChild = getChild(charNext - 0x30);
 				printf("<< Error:  there is no Child with index: %c\n", charNext);
 
 				continue;
 			}
 			else
 			{ // return 'char' back to the stream
+				perror("ungetc");
 				ungetc(charNext, stdin);
+				perror("after ungetc");
 			}
 		}
 		//=== select command ===
@@ -153,6 +156,10 @@ int main(int argc, char* argv[], char* envp[])
 		}
 		case 's':
 		{
+			char message[128];
+			sprintf(message, "pChild=%p", pChild);
+			perror(message);
+
 			if (pChild != NULL)
 			{
 				stopStatistic(pChild->pid);
@@ -239,11 +246,14 @@ void startStatistic(pid_t pidChild)
 
 void stopStatistic()
 {
+	perror("stopStatistic ST all");
+
 	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
 	{
 		stopStatistic(pChild->pid);
 		pChild = pChild->allChildren.tqe_next;
 	}
+	perror("perror OK");
 }
 
 void stopStatistic(pid_t pidChild)
@@ -262,14 +272,21 @@ void printStatistic(struct Child* pChild)
 
 struct Child* getChild(int indexChild)
 {
+	printf("getChild ST\n");
+	printf("  indexChild=%d\n", indexChild);
+
 	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
 	{
+		printf("pChild = %d\n", pChild->index);
+
 		if (pChild->index == indexChild)
 		{
 			return pChild;
 		}
 		pChild = pChild->allChildren.tqe_next;
 	}
+	printf("getChild OK\n");
+
 	return NULL;
 }
 
