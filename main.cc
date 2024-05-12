@@ -1,14 +1,14 @@
 #include "global.h"
 
-#include <cstdio>
+#include <ctype.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <sys/queue.h>
 #include <sys/wait.h>
-#include <ctype.h>
 
 //===== `Child` Struct =====
 struct Child
@@ -22,8 +22,10 @@ struct Child
 //===== Functions =====
 int createChild(unsigned indexChild, char* pathChildEnv, char* dirChild);
 struct Child* getChild(int indexChild);
+void onExit();										// clear resources
 void printStatistic(struct Child* pChild);
 void printUsage(char* nameProgram, short index);
+void showStatisticAfterTimer();
 void stopChild(pid_t pidChild);						// send `SIGKILL` signal to Child
 void stopChildAll();								// terminate all Child processes
 void startStatistic();
@@ -34,7 +36,8 @@ void stopStatistic(pid_t pidChild);
 //=== Global Variables ===
 TAILQ_HEAD(HeadOfCollection, Child) head = TAILQ_HEAD_INITIALIZER(head);
 unsigned countChild = 0;
-
+timer_t	idTimer = 0;
+int gFlag = 0;
 
 int main(int argc, char* argv[], char* envp[])
 {
@@ -66,33 +69,36 @@ int main(int argc, char* argv[], char* envp[])
 	unsigned indexChild = 0;
 	TAILQ_INIT(&head);                      /* Initialize the queue. */
 
-	while ((ch = getchar()) != EOF)
+//	while ((ch = getchar()) != EOF)
+	while (true)
 	{
+		///// begin
+		ch = getchar();		///
+		if (ch == EOF)
+		{
+			printf("EOF");
+			continue;
+		}
+		///// end
 		int charNext;
 		struct Child* pChild = NULL;
 
 		if (ch == 's' || ch == 'g' || ch == 'p')
 		{
 			charNext = getchar();
-			fprintf(stderr, "charNext = %c\n", charNext);
 			if (isdigit(charNext))
 			{
 				pChild = getChild(charNext - 0x30);
-				printf("<< Error:  there is no Child with index: %c\n", charNext);
-
-				continue;
 			}
-			else
+			if(pChild == NULL)
 			{ // return 'char' back to the stream
-				perror("ungetc");
 				ungetc(charNext, stdin);
-				perror("after ungetc");
 			}
 		}
 		//=== select command ===
 		switch (ch)
 		{
-		case '+':						// add a new Child process
+		case '+':								// add a new Child process
 		{
 			pid_t	pidChild;
 
@@ -116,7 +122,7 @@ int main(int argc, char* argv[], char* envp[])
 
 			break;
 		}
-		case '-':						// terminate latest created Child process
+		case '-':								// terminate latest created Child process
 		{
 			struct Child* pChild;
 
@@ -136,14 +142,9 @@ int main(int argc, char* argv[], char* envp[])
 			printf("countChildren = %d\n", countChild);
 			break;
 		}
-		case 'k':
+		case 'g':								// show Statistic
 		{
-			stopChildAll();				// terminate all Child processes
-			TAILQ_INIT(&head);
-			break;
-		}
-		case 'g':
-		{
+			gFlag = 1;
 			if (pChild != NULL)
 			{
 				startStatistic(pChild->pid);
@@ -154,29 +155,11 @@ int main(int argc, char* argv[], char* envp[])
 			}
 			break;
 		}
-		case 's':
+		case 'k':								// terminate all Child processes
 		{
-			char message[128];
-			sprintf(message, "pChild=%p", pChild);
-			perror(message);
-
-			if (pChild != NULL)
-			{
-				stopStatistic(pChild->pid);
-			}
-			else
-			{
-				stopStatistic();
-			}
+			stopChildAll();
+			TAILQ_INIT(&head);
 			break;
-		}
-		case 'p':
-		{
-			if (pChild != NULL)
-			{
-				stopStatistic();				// запрещает всем C_k вывод
-				startStatistic(pChild->pid);	// запрашивает C_<num> вывести свою статистику
-			}
 		}
 		case 'l':
 		{
@@ -189,12 +172,36 @@ int main(int argc, char* argv[], char* envp[])
 			}
 			break;
 		}
+		case 'p':								// print Statistic for single Child only
+		{
+			if (pChild != NULL)
+			{
+				stopStatistic();				// запрещает всем C_k вывод
+				usleep(1000);
+				startStatistic(pChild->pid);	// запрашивает C_<num> вывести свою статистику
+				showStatisticAfterTimer();
+			}
+			break;
+		}
 		case 'q':
-			stopChildAll();				// terminate all Child processes
+		{
+			onExit();							// clear resources
 
-			printf("main OK\n");
+			printf("main OK quit\n");
 			return 0;
-
+		}
+		case 's':
+		{
+			if (pChild != NULL)
+			{
+				stopStatistic(pChild->pid);
+			}
+			else
+			{
+				stopStatistic();
+			}
+			break;
+		}
 		case 'z':						// kill zombie processes
 		{
 			int stat;
@@ -207,7 +214,8 @@ int main(int argc, char* argv[], char* envp[])
 
 		}
 	}
-	printf("main OK\n");
+	printf("main OK main");
+	onExit();							// clear resources
 
 	return 0;
 }
@@ -246,14 +254,11 @@ void startStatistic(pid_t pidChild)
 
 void stopStatistic()
 {
-	perror("stopStatistic ST all");
-
 	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
 	{
 		stopStatistic(pChild->pid);
 		pChild = pChild->allChildren.tqe_next;
 	}
-	perror("perror OK");
 }
 
 void stopStatistic(pid_t pidChild)
@@ -272,21 +277,14 @@ void printStatistic(struct Child* pChild)
 
 struct Child* getChild(int indexChild)
 {
-	printf("getChild ST\n");
-	printf("  indexChild=%d\n", indexChild);
-
 	for (struct Child* pChild = head.tqh_first; pChild != NULL; )
 	{
-		printf("pChild = %d\n", pChild->index);
-
 		if (pChild->index == indexChild)
 		{
 			return pChild;
 		}
 		pChild = pChild->allChildren.tqe_next;
 	}
-	printf("getChild OK\n");
-
 	return NULL;
 }
 
@@ -310,4 +308,76 @@ void stopChildAll()
 		pChild = pChildNext;
 	}
 	countChild = 0;
+}
+
+// catch SIGUSR2 and send SIGUSR2 to all children
+void signalHandler(int numberSignal)
+{
+	printf("signalHandler STOK\n");
+	if (gFlag != 1)
+	{
+		startStatistic();
+	}
+}
+
+// start signal timer
+// set signal handler
+void showStatisticAfterTimer()
+{
+	printf("showStatisticAfterTimer ST\n");
+
+	if (idTimer == 0)
+	{
+		struct sigevent	event;
+
+		event.sigev_notify = SIGEV_SIGNAL;
+		event.sigev_signo = SIGUSR2;
+		event.sigev_value.sival_ptr = NULL;
+
+		if (timer_create(CLOCK_REALTIME, &event, &idTimer))
+		{
+			printf("Error during Timer creation: %s\n", strerror(errno));
+			printf("showStatisticAfterTimer OK\n");
+			exit(EXIT_FAILURE);
+		}
+		//=== connect to SIGUSR2 ===
+		int					result;
+		struct sigaction	action;
+
+		action.sa_handler = signalHandler;
+		action.sa_flags = 0;
+
+		result = sigaction(SIGUSR2, &action, NULL);						// SIGUSR2
+		if (result == -1)
+		{
+			printf("cannot connect to Signal: SIGUSR2\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+	struct itimerspec	ts = { 0, };
+	
+	gFlag = 0;
+	ts.it_value.tv_sec = 5;
+	/*
+	ts.it_value.tv_nsec = 1000;
+	ts.it_interval.tv_sec = 0;
+	ts.it_interval.tv_nsec = 0;
+	//*/
+	if (timer_settime(idTimer, 0/*TIMER_RELTIME*/, &ts, NULL) == -1)
+	{
+		printf("Error during Timer start: %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	printf("showStatisticAfterTimer OK\n");
+}
+
+// clear resources
+void onExit()
+{
+	if (idTimer != 0)
+	{
+		timer_delete(idTimer);
+		idTimer = 0;
+	}
+	stopChildAll();						// terminate all Child processes
 }

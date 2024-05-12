@@ -133,11 +133,14 @@ int main(int argc, char* argv[])
 		printf("child process OK\n");
 		return 1;
 	}
-	nameProgram = argv[0];
-
+	// generate 0-1 pairs in separate thread
 	pthread_t	idThread;
 
 	pthread_create(&idThread, NULL, &thread_function, NULL);
+	
+	//=== main loop ===
+	nameProgram = argv[0];
+
 	withNanoSleep();
 
 

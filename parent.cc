@@ -1,8 +1,7 @@
-#include <cstdio>
+#include "global.h"
+
 #include <string.h>
 #include <unistd.h>
-#include <cerrno>
-#include "global.h"
 
 int startChild(char* pathChild, char* pathEnv, unsigned indexChild);
 
